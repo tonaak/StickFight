@@ -14,14 +14,16 @@ namespace StickFight.Player
     {
         [Header("Movement")]
         [SerializeField] private float moveSpeed = 6f;
+        [SerializeField] private float acceleration = 60f;
+        [SerializeField] private float deceleration = 80f;
 
         [Header("Jump")]
         [SerializeField] private float jumpForce = 12f;
-        [SerializeField] private LayerMask groundLayer = ~0;
-        [SerializeField] private float groundCheckDistance = 0.1f;
+        [SerializeField] private LayerMask groundLayer;
+        [SerializeField] private Transform groundCheck;
+        [SerializeField] private float groundCheckRadius = 0.2f;
 
         private Rigidbody2D rb;
-        private BoxCollider2D boxCollider;
 
         // Raw input read on the main thread, consumed in FixedUpdate.
         private float moveInput;
@@ -31,7 +33,6 @@ namespace StickFight.Player
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
-            boxCollider = GetComponent<BoxCollider2D>();
         }
 
         private void Update()
@@ -77,10 +78,14 @@ namespace StickFight.Player
             }
         }
 
-        // Moves the character via Rigidbody2D velocity, independent of framerate.
+        // Accelerates toward the target speed and decelerates sharply to a stop
+        // when input is released, avoiding an "ice skating" feel.
         private void Move()
         {
-            rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+            float targetSpeed = moveInput * moveSpeed;
+            float rate = Mathf.Abs(moveInput) > 0.01f ? acceleration : deceleration;
+            float newX = Mathf.MoveTowards(rb.linearVelocity.x, targetSpeed, rate * Time.fixedDeltaTime);
+            rb.linearVelocity = new Vector2(newX, rb.linearVelocity.y);
         }
 
         private void Jump()
@@ -89,14 +94,16 @@ namespace StickFight.Player
             rb.AddForce(Vector2.up * jumpForce, ForceMode2D.Impulse);
         }
 
-        // Checks a thin box just below the character's feet, derived from its own
-        // collider bounds, so it works without needing a separate ground-check transform.
+        // Checks a small circle at the GroundCheck transform (placed at the character's
+        // feet) against the dedicated Ground layer only, so the player's own collider
+        // can never register as ground.
         private bool CheckGrounded()
         {
-            Bounds bounds = boxCollider.bounds;
-            Vector2 origin = new Vector2(bounds.center.x, bounds.min.y - groundCheckDistance * 0.5f);
-            Vector2 size = new Vector2(bounds.size.x * 0.9f, groundCheckDistance);
-            return Physics2D.OverlapBox(origin, size, 0f, groundLayer) != null;
+            if (groundCheck == null)
+            {
+                return false;
+            }
+            return Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer) != null;
         }
     }
 }
